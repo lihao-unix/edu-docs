@@ -341,24 +341,7 @@ httpd-tools-2.4.6-40.el7.centos.1.x86_64
 </pre>
 
 ###使用api自定义安装(自定义装机平台)
-cd /etc/http/conf.d/
-cat cobbler.conf
-21 ProxyPass /cobbler_api http://localhost:25151/
-22 ProxyPassReverse /cobbler_api http://localhost:25151/
-
-例子1：
-vim cobbler_list.py
-#！/usr/bin/python
-import xmlrpclib
-server = xmlrpclib.Server("http://192.168.56.11/cobble_api")
-#print server.get_distros()
-print server.get_profiles()
-print server.get_systems()
-#print server.get_images()
-print server.get_repos()
-
-python cobbler_list.py
-
+	.......
 ###自定义yum源
 <pre>
 #添加openstack-mitaka最新yum源，为后期做准备
