@@ -1,7 +1,33 @@
 ##Cobbler自动化部署
 ######版本： `Version 1.0`
+
+
+
 ---
-* 实验目的
+
+> 目标一览
+>
+>1. 了解cobbler
+	* 实验目的
+	* Cobbler简介
+	* kickstart\Cobbler对比
+>2. 基础环境准备
+>3. 实验开始
+	* 配置文件了解
+	* 安装cobblerC7
+	* 安装多内核C7+C6
+>5. 自动重装系统
+>6. 定制化安装
+	* 自定义安装
+	* 自定义登录界面
+	* web管理Cobbler
+	* 使用api自定义安装
+>7. 定义yum仓库
+>8. 总结
+
+---
+##了解Cobbler
+###实验目的
 >快速使用cobbler搭建项目的基本环境,来实现系统环境的快速部署.
 >在工作中，经常会面临几千台甚至上万台的服务器时，仅仅安装操作系统如
 >果不能够自动化完成，那比登天还难.
@@ -35,13 +61,8 @@ Cobbler客户端Koan支持虚拟机安装和操作系统重新安装，使重装
 * 重新启动机器以开始安装（如果电源管理已启用）
 * 使用 koan 客户端，Cobbler 可从客户端配置虚拟机并重新安装系统。
 
-###Cobbler各对象之间的关系图
-![Cobbler各对象之间的关系图](http://www.it165.net/uploadfile/2013/1105/20131105102832391.png)
 
-###Cobbler工作原理图
-![Cobbler工作原理图](http://www.it165.net/uploadfile/2013/1105/20131105102833695.png)
-
-###基础环境准备
+##基础环境准备
 <pre>
 >>系统版本
 [root@linux-nodel ~]# cat /etc/redhat-release 
@@ -67,6 +88,7 @@ Disabled
 
 
 ##实验开始
+----
 ###安装Cobbler
 <pre>yum -y install cobbler cobbler-web pykickstart httpd dhcp tftp xinetd
 
@@ -213,5 +235,182 @@ cobbler profile list #导入distro会自动生成profile
 cobbler profile report
 cobbler sync  #每次修改profile都需要同步
 </pre>
-###Cobbler安装界面
-![Cobbler安装界面](http://cdn.xuliangwei.com/qiniu/446/image/5e2f9a2bd3560b9655ca1926fa0fd481.png?imageView2/2/w/529/h/254)
+###Cobbler安装界面 
+####如图即选择好内核后可自动安装，可有多个内核,添加多个系统
+![Cobbler安装界面](https://raw.githubusercontent.com/lihao-unix/edu-docs/master/image/TITLE.png)
+###添加C6内核
+---
+>挂载C6光盘
+<pre>
+mount /dev/cdrom /mnt
+cobbler import --path=/mnt --name=CentOS-6.7-x86_64 --arch=x86_64
+* --path镜像路径
+* --name为安装源定义一个名字
+* --arch指定安装源是32位还是64位
+注：cobbler会将镜像中的所有安装文件拷贝到本地一份放在/var/www/cobbler/ks_mirror/CentOS-6.7-x86_64目录下，需要系统有足够的安装空间
+</pre>
+
+<pre>
+cobbler distro list #列出所有distro
+[root@linux-nodel ~]# cobbler distro list
+   CentOS-6.7-x86_64
+   CentOS-7.1-distro-x86_64
+
+cobbler profile list #导入distro会自动生成profile
+
+注:可以使用--kickstart=/path/to/kickstart_file进行导入
+   so>> cobbler --import会自动为导入的distro生成一个profile
+</pre>
+
+<pre>
+#ks文件放到这里并通过--kickstart指出来：cd /var/lib/cobbler/kickstarts 
+[root@linux-nodel kickstarts]# cobbler profile edit --name=CentOS-7.1-distro-x86_64 --kickstart=/var/lib/cobbler/kickstarts/CentOS-7-x86_64.cfg
+cobbler profile report
+cobbler sync  #每次修改profile都需要同步
+</pre>
+效果如图：
+
+![RENAME-TITLE](https://raw.githubusercontent.com/lihao-unix/edu-docs/master/image/C7C6TITLE.png)
+#自动化重装系统
+`客户端`
+
+	yum -y install koan
+	koan --server=192.168.56.11 --list=profiles #列出cobbler系统中可以重装的系统 地址为cobbler的地址
+	[root@bogon ~]# koan --server=192.168.56.11 --list=profiles
+	koan --replace-self --server=192.168.56.11 --profile=CentOS-7-x86_64 #指定要重装的系统
+	reboot
+	* 然后重启后系统会直接安装指定系统不会进入选择界面 *
+	如何解决koan安装错误机器，或者cobbler自动化安装错误机器。
+	环境设计：装机Vlan
+
+#定制化安装
+* 自定义安装
+* 自定义登录界面
+* web管理Cobbler
+
+###自定义安装
+---
+根据机器的MAC地址，自动绑定IP，网关，dns等
+<pre>
+[root@cobbler-node1 ~]# cobbler system add --name=xuliangwei-pc --mac=00:0C:29:6E:41:CB --profile=Centos7.1-profile-x86_64 \
+--ip-address=192.168.56.13 --subnet=255.255.255.0 --gateway=10.0.0.2 --interface=eth0 \
+--static=1 --hostname=lihao.pw 
+--name-servers=”114.114.114.114 8.8.8.8″
+</pre>
+######新版的Web界面使用的是https,登录：https://192.168.56.11/cobbler_web
+######cobbler_web支持多种认证方式，如`authn_configfil`、`authn_ldap`或`authn_pam`等，默认为`authn_denyall`
+
+
+###更改装机界面
+---
+>即上图中的cobbler|http://cobbler.github.io
+
+<pre>
+[root@cobbler-node1 ~]# grep “lihao” /etc/cobbler/pxe/pxedefault.template #自定义装机页面
+MENU TITLE lihao | http://lihao.com
+[root@cobbler-node1 ~]# cobbler sync #同步
+</pre>
+
+![RENAME-TITLE](https://raw.githubusercontent.com/lihao-unix/edu-docs/master/image/RETITLE.png)
+
+###web管理Cobbler
+####登录web界面 `https://192.168.56.11/cobbler_web`
+
+![cobbler-login](https://raw.githubusercontent.com/lihao-unix/edu-docs/master/image/cobbler-login.png)
+<pre>更改cobbler密码：
+[root@linux-nodel cobbler]# pwd
+/etc/cobbler
+定义用户的配置：
+[root@linux-nodel cobbler]# tail -3 users.conf 
+admin = ""
+cobbler = ""
+定义密码的配置：
+[root@linux-nodel cobbler]# cat users.digest 
+cobbler:Cobbler:a2d6bae81669d707b72c0bd9806e01f3
+
+</pre>
+<pre>
+Cobbler-web修改密码：
+[root@linux-nodel cobbler]# htdigest /etc/cobbler/users.digest "Cobbler" cobbler #"用户描述"  用户名
+Changing password for user cobbler in realm Cobbler
+New password:123456
+Re-type new password:123456 
+
+[root@linux-nodel cobbler]# rpm -qf `which htdigest`
+httpd-tools-2.4.6-40.el7.centos.1.x86_64
+</pre>
+
+###使用api自定义安装(自定义装机平台)
+cd /etc/http/conf.d/
+cat cobbler.conf
+21 ProxyPass /cobbler_api http://localhost:25151/
+22 ProxyPassReverse /cobbler_api http://localhost:25151/
+
+例子1：
+vim cobbler_list.py
+#！/usr/bin/python
+import xmlrpclib
+server = xmlrpclib.Server("http://192.168.56.11/cobble_api")
+#print server.get_distros()
+print server.get_profiles()
+print server.get_systems()
+#print server.get_images()
+print server.get_repos()
+
+python cobbler_list.py
+
+###自定义yum源
+<pre>
+#添加openstack-mitaka最新yum源，为后期做准备
+cobbler repo add --name=openstack-mitaka --mirror=http://mirrors.aliyun.com/centos/7.2.1511/cloud/x86_64/openstack-mitaka/ --arch=x86_64 --breed=yum
+
+vim /etc/cobbler/settings
+vim /var/lib/cobbler/CentOS-7-x86_64.cfg
+#开始同步
+cobbler reposync
+#添加repo到对应的profile
+cobbler profile edit --name=CentOS-7-x86_64 --repos="openstack-mitaka"
+修改kickstart文件，添加。（到%post %end中间）
+%post
+systemctl disable postfix.service
+
+$yum_config_stanza
+%end
+添加定时任务，定期同步repo
+echo "1 3 * * * cobbler"
+</pre>
+
+##总结##
+<pre>
+备注：自动化装机流程
+
+1. 服务器采购
+2. 服务器验收并设置raid
+3. 服务商提供验收单，运维验收负责人签字。
+4. 服务器上架
+5. 资产录入。
+6. 开始自动化安装。   
+	1. 将新服务器划入装机vlan
+	2. 根据资产清单上的mac地址，自定义安装。
+		1. 机房 
+		2. 机房区域 
+		3. 机柜  
+		4. 服务器位置
+		5. 服务器网线接入端口 
+		6. 该端口mac地址 
+		7. profile 操作系统 分区等 预分配的ip地址  主机名 子网  网关 dns  角色。
+						
+	3.自动化装机平台，安装。
+	00:50:56:31:6C:DF
+	IP:192.168.56.12  
+	主机名：linux-node2.oldboyedu.com 
+	掩码：255.255.255.0 
+	网关：192.168.56.2 
+	DNS：192.168.56.2
+cobbler system add --name=linux-node2.oldboyedu.com --mac=00:50:56:31:6C:DF --profile=CentOS-7-x86_64 \
+--ip-address=192.168.56.12 --subnet=255.255.255.0 --gateway=192.168.56.2 --interface=eth0 \
+--static=1 --hostname=linux-node2.oldboyedu.com --name-servers="192.168.56.2" \
+--kickstart=/var/lib/cobbler/kickstarts/CentOS-7-x86_64.cfg
+
+</pre>
+
